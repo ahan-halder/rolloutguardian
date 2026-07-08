@@ -1,4 +1,4 @@
-# # BlastGate
+# RolloutGuardian
 
 ### Resilience-aware release governance that connects Harness FME, Chaos Engineering, and SRM
 
@@ -14,7 +14,7 @@
 > deployments on them. Harness Policy as Code already lets you attach OPA policies to a feature
 > flag the moment it's saved or toggled.
 >
-> Nobody has wired those four things together. BlastGate does.
+> Nobody has wired those four things together. RolloutGuardian does.
 
 ---
 
@@ -47,12 +47,12 @@
 
 ## 1. Overview
 
-**BlastGate** is a resilience-aware release gate for Harness. It sits between a feature-flag
+**RolloutGuardian** is a resilience-aware release gate for Harness. It sits between a feature-flag
 rollout decision in **FME** and the moment that decision actually reaches users, and asks one
 question no existing tool asks: *does the blast radius of this rollout have chaos-tested
 resilience coverage and a healthy error budget right now?*
 
-If the answer is yes, BlastGate stays out of the way. If the answer is no, BlastGate blocks or
+If the answer is yes, RolloutGuardian stays out of the way. If the answer is no, RolloutGuardian blocks or
 flags the rollout through Harness's own OPA-based governance, explains exactly which service is
 under-covered and why, and — the part that turns this from a linter into a tool people actually
 adopt — generates the smallest possible chaos experiment that would close precisely that gap.
@@ -94,7 +94,7 @@ same question about the same change at the same time.
 | Chaos coverage planning tools (schedule experiments) | ✗ | ✓ | ✗ | ✗ | ✗ |
 | SRM reliability guardrails (deploy-level) | ✗ | ✗ | ✓ | ✗ | ✓ — but only at the *deployment*, not the *flag*, level |
 | A generic OPA policy pack for FME hygiene | naming/config rules | ✗ | ✗ | ✗ | ✓ — but on static rules, not live signals |
-| **BlastGate** | ✓ | ✓ | ✓ | ✓ | ✓ — scoped to exactly the blast radius, not the whole deploy |
+| **RolloutGuardian** | ✓ | ✓ | ✓ | ✓ | ✓ — scoped to exactly the blast radius, not the whole deploy |
 
 The last row is the whole project.
 
@@ -103,7 +103,7 @@ The last row is the whole project.
 ## 3. Why This Gap Exists
 
 This isn't a knock on Harness — if anything, the opposite. The reason this gap is buildable
-*today* is that Harness has already shipped every primitive BlastGate needs; it just hasn't
+*today* is that Harness has already shipped every primitive RolloutGuardian needs; it just hasn't
 connected them across module boundaries, which is a genuinely hard product-scoping problem for a
 platform vendor and a genuinely good portfolio problem for one engineer:
 
@@ -122,7 +122,7 @@ platform vendor and a genuinely good portfolio problem for one engineer:
   works today) — but nobody has populated those output variables with cross-module resilience
   context.
 
-BlastGate is the connective tissue across four already-shipped capabilities, not a request for a
+RolloutGuardian is the connective tissue across four already-shipped capabilities, not a request for a
 fifth one.
 
 ---
@@ -135,7 +135,7 @@ flowchart LR
         A["FME: rollout % increased<br/>or targeting rule changed"]
     end
 
-    subgraph BG["BlastGate"]
+    subgraph RG["RolloutGuardian"]
         B1[Blast Radius Resolver]
         B2[Signal Aggregator]
         B3[OPA Decision Engine]
@@ -180,12 +180,12 @@ flowchart LR
 ## 5. How Blast Radius Is Resolved
 
 A flag's blast radius is the set of services whose runtime behavior changes when the flag's
-evaluation result changes. BlastGate resolves it with three signals of decreasing precision and
+evaluation result changes. RolloutGuardian resolves it with three signals of decreasing precision and
 increasing availability, and merges them into one confidence-scored graph.
 
 ### 5.1 Static call-site analysis (highest precision, narrowest coverage)
 
-Using [tree-sitter](https://tree-sitter.github.io/tree-sitter/) grammars, BlastGate scans a
+Using [tree-sitter](https://tree-sitter.github.io/tree-sitter/) grammars, RolloutGuardian scans a
 service's source for FME/Feature-Flag SDK call sites referencing a given flag key, and attributes
 the call site to the owning service via the IDP catalog. Initial language support: Go,
 TypeScript, Java, Python.
@@ -193,7 +193,7 @@ TypeScript, Java, Python.
 ### 5.2 Trace-based statistical association (medium precision, needs traffic)
 
 If the flag's evaluation context is propagated onto request traces (a common pattern with
-OpenFeature/FME hooks emitting OpenTelemetry attributes), BlastGate mines historical traces and
+OpenFeature/FME hooks emitting OpenTelemetry attributes), RolloutGuardian mines historical traces and
 tests whether a downstream service's latency distribution differs significantly between
 requests where the flag was on vs. off:
 
@@ -219,7 +219,7 @@ tail shape.
 
 ### 5.3 Structural fallback (coarsest, always available)
 
-When traffic is too low or call-site analysis is inconclusive, BlastGate falls back to the
+When traffic is too low or call-site analysis is inconclusive, RolloutGuardian falls back to the
 service's declared 1–2 hop neighborhood in the **Chaos application map** / IDP catalog
 dependency graph — the same topology Harness already builds and already uses to flag "coverage
 gaps," just walked outward from the flag's owning service instead of visualized wholesale.
@@ -245,7 +245,7 @@ These are fused through an explicit, versioned Rego policy — not a hidden weig
 so the decision is auditable the same way every other Harness governance decision is:
 
 ```rego
-package blastgate
+package rolloutguardian
 
 # Illustrative — adjust field names to match your Signal Aggregator's payload.
 # Written in the pre-Rego-v1 dialect (partial-set `deny`/`warn` rules), matching
@@ -312,22 +312,22 @@ Example decision object emitted by the Signal Aggregator / Decision Engine pair:
 
 ## 7. Wiring Into Harness's Real Policy Hooks
 
-This is the part that makes BlastGate a governance system rather than a linter with an API
+This is the part that makes RolloutGuardian a governance system rather than a linter with an API
 client attached. There are two realistic integration patterns, both built entirely on Harness
 capabilities that already exist:
 
 **Pattern A — pipeline-scoped, output-variable gating.**
-A custom/HTTP step calls `POST /evaluate` on the BlastGate service immediately before the FME
+A custom/HTTP step calls `POST /evaluate` on the RolloutGuardian service immediately before the FME
 "Set Default Allocations" pipeline step runs, and writes the decision to a step output variable.
 A native Harness **Policy step**, attached to run `On Step Start` or immediately after, evaluates
-a Rego policy against `input[_].outcome.outputVariables.blastgate_decision` — the exact mechanism
+a Rego policy against `input[_].outcome.outputVariables.rolloutguardian_decision` — the exact mechanism
 Harness's own documentation uses to gate on STO scan results. This is the recommended pattern for
 teams that already manage FME changes through Harness CD/CI pipelines rather than the FME UI
 directly.
 
 **Pattern B — FME-entity-scoped Policy Set.**
 Harness Policy as Code already supports Policy Sets scoped to the Feature-Flag entity type,
-evaluated whenever a flag is saved or toggled — independent of any pipeline. BlastGate can
+evaluated whenever a flag is saved or toggled — independent of any pipeline. RolloutGuardian can
 publish its computed decision to a small external cache keyed by `flag_id`, which a Rego policy
 on that Policy Set consults. This pattern covers direct-UI flag changes that never touch a
 pipeline at all. *(The exact external-data access mechanism available to FME-scoped policies —
@@ -336,7 +336,7 @@ current Harness Policy-as-Code documentation before implementation; this report 
 most likely mechanism rather than a verified one, in the same spirit of honest hedging the
 source research for this project used throughout.)*
 
-Both patterns default to **audit mode** on first rollout: BlastGate records what it *would* have
+Both patterns default to **audit mode** on first rollout: RolloutGuardian records what it *would* have
 done without actually blocking anything, so a team can tune thresholds against real traffic
 before switching the Policy Set's enforcement behavior from `Warn and Continue` to `Error and
 Exit` — mirroring exactly how Harness recommends introducing any new governance policy.
@@ -345,7 +345,7 @@ Exit` — mirroring exactly how Harness recommends introducing any new governanc
 
 ## 8. Closing the Loop: Auto-Generated Remediation
 
-A `block` decision is only useful if the fastest way out is obvious. When BlastGate blocks a
+A `block` decision is only useful if the fastest way out is obvious. When RolloutGuardian blocks a
 rollout, it emits a minimal chaos experiment scoped to exactly the uncovered service and fault
 family implied by the gap (a stateless service with no pod-level coverage gets a `pod-delete`
 proposal; a service with no dependency-latency coverage gets a network-latency proposal), using
@@ -357,7 +357,7 @@ the same fault / weight / probe vocabulary Harness Chaos already uses:
 # before use; structure follows the documented fault / weight / probe model.
 experiment:
   name: payment-service-pod-delete-min
-  generated_by: blastgate
+  generated_by: rolloutguardian
   generated_for_flag: checkout-v2-express-pay
   infrastructure_id: prod-payments-cluster
   target:
@@ -386,17 +386,17 @@ chaos testing even means for this service."
 
 The single biggest adoption risk for any new governance gate is that nobody believes it's worth
 the friction until it's proven itself — usually after an incident it would have prevented. So
-BlastGate ships a backtest mode from day one: given historical FME rollout-change timestamps and
+RolloutGuardian ships a backtest mode from day one: given historical FME rollout-change timestamps and
 a simple incident timeline (a CSV/YAML export is enough to start), it replays the scoring engine
 as if it had been running at each historical rollout time, using Chaos/SRM data as it stood then
 if available, or the most recent prior snapshot otherwise.
 
 ```
-BlastGate Backtest Report — Q2 2026 (illustrative sample run)
+RolloutGuardian Backtest Report — Q2 2026 (illustrative sample run)
 ────────────────────────────────────────────────────────────
 Flag rollout events analyzed:                    142
 Sev1/Sev2 incidents within 24h of a rollout:        9
-Rollouts BlastGate would have flagged
+Rollouts RolloutGuardian would have flagged
   (warn or block) among those 9:                    7   (78%)
 False-positive rate (flagged, no incident followed): 11%
 Median lead time gained:                        3h 40m
@@ -414,17 +414,17 @@ governance data to AI agents through a small set of generic tools (`harness_list
 `harness_create`, etc.) routed through a declarative resource registry — and a dedicated FME
 toolset already lets an agent inspect flags, targeting rules, and rollout status conversationally.
 
-BlastGate doesn't try to replace or duplicate that. It ships a small, complementary MCP adapter
+RolloutGuardian doesn't try to replace or duplicate that. It ships a small, complementary MCP adapter
 exposing two new tools that the existing registry has no equivalent for, because they require
 *computed cross-module reasoning*, not a CRUD read:
 
 | Tool | Description |
 |---|---|
-| `blastgate_evaluate` | Given a flag and a proposed rollout change, returns the full decision object from [§6](#6-resilience-readiness-scoring) — usable in a prompt like *"is it safe to roll `checkout-v2-express-pay` out to 100% in prod?"* |
-| `blastgate_explain` | Returns the human-readable reasoning trail behind the most recent decision for a flag, for use in incident retros or PR descriptions. |
+| `rolloutguardian_evaluate` | Given a flag and a proposed rollout change, returns the full decision object from [§6](#6-resilience-readiness-scoring) — usable in a prompt like *"is it safe to roll `checkout-v2-express-pay` out to 100% in prod?"* |
+| `rolloutguardian_explain` | Returns the human-readable reasoning trail behind the most recent decision for a flag, for use in incident retros or PR descriptions. |
 
 Consistent with the safety model the official Harness MCP server already follows (confirmation
-required for writes, fail-closed on ambiguity, read-only mode available), `blastgate_evaluate` is
+required for writes, fail-closed on ambiguity, read-only mode available), `rolloutguardian_evaluate` is
 strictly read/advisory: it can recommend blocking a rollout, but it never toggles a flag, edits a
 targeting rule, or triggers a chaos experiment on its own. A human — or a separately-authorized,
 narrowly-scoped automation — always takes the actual action. This mirrors the broader,
@@ -437,13 +437,13 @@ in the loop.
 
 ## 11. Harness API & Surface Touchpoints
 
-| Module | What BlastGate reads | What BlastGate writes |
+| Module | What RolloutGuardian reads | What RolloutGuardian writes |
 |---|---|---|
 | **FME** | Flag definitions, targeting rules, current rollout percentage, rollout-change events | Nothing directly — decisions are surfaced via the policy hooks in [§7](#7-wiring-into-harnesss-real-policy-hooks), never a direct flag mutation |
 | **Chaos Engineering** | Application map / service topology, resilience score, resilience coverage freshness per service, experiment history | Draft experiment manifests only (never auto-executed) |
 | **SRM** | SLOs, error budget remaining, error budget burn rate, Change Impact Analysis correlations | Nothing |
 | **STO** *(optional)* | Open critical/high finding counts per service | Nothing |
-| **IDP / Backstage catalog** | Service ownership, declared dependencies, existing Scorecard checks | Optionally contributes a `blastgate-resilience-readiness` Scorecard check |
+| **IDP / Backstage catalog** | Service ownership, declared dependencies, existing Scorecard checks | Optionally contributes a `rolloutguardian-resilience-readiness` Scorecard check |
 | **Platform / Policy as Code** | — | Reads/writes decision context consumed by an OPA Policy Set (see [§7](#7-wiring-into-harnesss-real-policy-hooks)) |
 
 All access uses the standard Harness API-key/PAT authentication model, scoped to the narrowest
@@ -467,10 +467,10 @@ role that supports read access to the above resources (see [§17](#17-security--
 ## 13. Repository Layout
 
 ```
-blastgate/
+rolloutguardian/
 ├── cmd/
-│   ├── blastgate/              # CLI entrypoint
-│   └── blastgate-server/       # Long-running gate service
+│   ├── rolloutguardian/              # CLI entrypoint
+│   └── rolloutguardian-server/       # Long-running gate service
 ├── internal/
 │   ├── resolver/                # Blast radius resolution (static + structural)
 │   ├── aggregator/              # Chaos / SRM / STO signal fetchers
@@ -482,7 +482,7 @@ blastgate/
 │   ├── graph_model.py
 │   └── requirements.txt
 ├── policies/
-│   └── blastgate/
+│   └── rolloutguardian/
 │       ├── authz.rego
 │       └── authz_test.rego
 ├── mcp-adapter/                  # TypeScript MCP server wrapper
@@ -494,7 +494,7 @@ blastgate/
 │   └── catalog-fixtures/
 ├── backtest/                     # Historical replay & impact simulation
 ├── docs/architecture.md
-├── .blastgate.yaml.example
+├── .rolloutguardian.yaml.example
 ├── docker-compose.yaml
 └── README.md
 ```
@@ -504,25 +504,25 @@ blastgate/
 ## 14. Getting Started
 
 ```bash
-git clone https://github.com/<you>/blastgate.git
-cd blastgate
-cp .blastgate.yaml.example .blastgate.yaml
+git clone https://github.com/<you>/rolloutguardian.git
+cd rolloutguardian
+cp .rolloutguardian.yaml.example .rolloutguardian.yaml
 
 # Read-only scopes recommended — see Security & Safety Model
 export HARNESS_API_KEY=pat.xxxxx
 export HARNESS_ACCOUNT_ID=xxxxx
 
 # Dry run against a single proposed rollout change
-go run ./cmd/blastgate evaluate \
+go run ./cmd/rolloutguardian evaluate \
   --flag checkout-v2-express-pay \
   --target-rollout 50 \
   --dry-run
 
 # Start the long-running gate service for pipeline/Policy Set integration
-go run ./cmd/blastgate-server --config .blastgate.yaml
+go run ./cmd/rolloutguardian-server --config .rolloutguardian.yaml
 ```
 
-Sample `.blastgate.yaml`:
+Sample `.rolloutguardian.yaml`:
 
 ```yaml
 harness:
@@ -553,7 +553,7 @@ signals:
     block_on_open_critical: true
 
 policy:
-  bundle: policies/blastgate/authz.rego
+  bundle: policies/rolloutguardian/authz.rego
   mode: audit   # audit | enforce
 
 remediation:
@@ -566,7 +566,7 @@ remediation:
 ## 15. Example Walkthrough
 
 ```
-$ blastgate evaluate --flag checkout-v2-express-pay --target-rollout 50
+$ rolloutguardian evaluate --flag checkout-v2-express-pay --target-rollout 50
 
 Blast radius resolved: 2 services (confidence >= 0.8)
   [FAIL] payment-service        chaos: stale (118d)     error budget: 12.4%  (below 10% marginal threshold)
@@ -580,7 +580,7 @@ Suggested next step:
   -> examples/experiments/generated/payment-service-pod-delete-min.yaml
      (~10 minute pod-delete experiment scoped to exactly this blast radius)
 
-Run `blastgate explain --flag checkout-v2-express-pay` for the full signal breakdown.
+Run `rolloutguardian explain --flag checkout-v2-express-pay` for the full signal breakdown.
 ```
 
 Once the suggested experiment is run and `payment-service`'s resilience score refreshes, the same
@@ -609,16 +609,16 @@ re-triage, just the underlying signal changing.
 
 ## 17. Security & Safety Model
 
-- **Least privilege by default.** BlastGate needs only read scopes against FME, Chaos, SRM,
+- **Least privilege by default.** RolloutGuardian needs only read scopes against FME, Chaos, SRM,
   IDP, and (optionally) STO. The only write path is drafting — never executing — a chaos
   experiment manifest, and that requires a separately-scoped, explicitly-granted permission.
-- **Advisory, not authoritative, by construction.** BlastGate can recommend `block`, but the
+- **Advisory, not authoritative, by construction.** RolloutGuardian can recommend `block`, but the
   actual enforcement happens inside Harness's own Policy as Code engine, which a human platform
-  team configures and can always override, audit, or disable. BlastGate never has direct
+  team configures and can always override, audit, or disable. RolloutGuardian never has direct
   authority to stop a deployment or toggle a flag — it only ever supplies the data-plane
   reasoning; the control-plane decision stays inside Harness governance, human-configured.
 - **Audit-mode-first rollout.** Every new policy starts in `Warn and Continue` / audit mode, per
-  [§7](#7-wiring-into-harnesss-real-policy-hooks), so a team can validate BlastGate's judgment
+  [§7](#7-wiring-into-harnesss-real-policy-hooks), so a team can validate RolloutGuardian's judgment
   against real rollouts before it can block anything.
 - **Trace data hygiene.** Any trace attributes ingested for [§5.2](#5-how-blast-radius-is-resolved)
   are scrubbed of PII-shaped fields before persistence; only aggregate latency distributions are
@@ -634,10 +634,10 @@ re-triage, just the underlying signal changing.
 - [ ] **v0.1** — Static + structural blast radius resolution, Chaos + SRM signal fetch, Rego
       decision engine, CLI, audit-only mode.
 - [ ] **v0.2** — Trace-based statistical blast-radius refinement, remediation manifest generator.
-- [ ] **v0.3** — Backtest / impact simulator, MCP adapter (`blastgate_evaluate`, `blastgate_explain`).
+- [ ] **v0.3** — Backtest / impact simulator, MCP adapter (`rolloutguardian_evaluate`, `rolloutguardian_explain`).
 - [ ] **v1.0** — Web dashboard, multi-service scorecards, Slack/webhook notifications, packaged
       as a native Harness Custom Step for one-step pipeline adoption.
-- [ ] **Later** — IDP Scorecard check contribution (`blastgate-resilience-readiness`), optional
+- [ ] **Later** — IDP Scorecard check contribution (`rolloutguardian-resilience-readiness`), optional
       federation with Harness's own Knowledge Graph tooling as that surface matures.
 
 ---
@@ -658,13 +658,13 @@ Consistent with the honest hedging good research reports use for anything not di
   Policy-as-Code documentation before implementation; Pattern A (pipeline output-variable gating)
   is the more conservatively verified integration path and the recommended starting point.
 - Signal freshness is only ever as good as how often an organization actually runs chaos
-  experiments — BlastGate creates a strong incentive to run them more often, but can't force it.
+  experiments — RolloutGuardian creates a strong incentive to run them more often, but can't force it.
 
 ---
 
 ## 20. Resume / Portfolio Framing
 
-> Designed and built BlastGate, a resilience-aware release-governance engine that fuses Harness
+> Designed and built RolloutGuardian, a resilience-aware release-governance engine that fuses Harness
 > FME rollout events with Chaos Engineering coverage data and SRM error-budget signals into a
 > blast-radius-scoped OPA policy gate; in backtesting against historical rollout data, it
 > surfaced 78% of flag-correlated incidents before they occurred, with an 11% false-positive rate.
@@ -684,9 +684,9 @@ designed to complement — not duplicate — a vendor's own official tooling.
 - [Harness Chaos Engineering key concepts](https://developer.harness.io/docs/resilience-testing/key-concepts/) — resilience probes, blast radius (chaos sense), application maps
 - [Harness Chaos resilience score](https://developer.harness.io/docs/chaos-engineering/features/experiments/resilience-score/) — fault weight / probe success formula
 - [Harness FME rollout plans](https://developer.harness.io/docs/feature-management-experimentation/feature-management/setup/create-a-rollout-plan/) — targeting rules, percentage rollout, treatments
-- [Harness FME MCP tools](https://developer.harness.io/docs/feature-management-experimentation/release-agent/mcp-tools/) — the existing agentic surface BlastGate's MCP adapter complements
+- [Harness FME MCP tools](https://developer.harness.io/docs/feature-management-experimentation/release-agent/mcp-tools/) — the existing agentic surface RolloutGuardian's MCP adapter complements
 - [Harness Policy as Code overview](https://developer.harness.io/docs/platform/governance/policy-as-code/harness-governance-overview/) — OPA version, Policy Sets, On Save/On Run/On Step Start
-- [Harness Policy as Code sample policies](https://developer.harness.io/docs/platform/governance/policy-as-code/sample-policy-use-case/) — the output-variable `deny` pattern BlastGate's gate reuses
+- [Harness Policy as Code sample policies](https://developer.harness.io/docs/platform/governance/policy-as-code/sample-policy-use-case/) — the output-variable `deny` pattern RolloutGuardian's gate reuses
 - [Harness MCP Server](https://developer.harness.io/docs/platform/harness-ai/harness-mcp-server/) / [GitHub](https://github.com/harness/mcp-server) — registry-based dispatch, safety model
 - [Open Policy Agent documentation](https://www.openpolicyagent.org/docs) — Rego language reference
 - [Backstage Software Catalog](https://backstage.io/docs/features/software-catalog/) — catalog-info.yaml and entity relationships
