@@ -1,0 +1,34 @@
+harness:
+  base_url: https://app.harness.io
+  account_id: ${HARNESS_ACCOUNT_ID}
+  auth:
+    api_key_env: HARNESS_API_KEY
+
+blast_radius:
+  static_analysis:
+    languages: [go, typescript, java, python]
+  trace_mining:
+    enabled: true
+    source: otlp_file
+    min_samples: 30
+    significance_alpha: 0.01
+  structural_fallback:
+    source: idp_catalog
+    max_hops: 2
+
+signals:
+  chaos:
+    coverage_freshness_days: 90
+  srm:
+    min_healthy_budget_pct: 25
+    min_marginal_budget_pct: 15
+  sto:
+    block_on_open_critical: true
+
+policy:
+  bundle: policies/rolloutguardian/authz.rego
+  mode: audit   # audit | enforce
+
+remediation:
+  auto_generate: true
+  output_dir: examples/experiments/generated

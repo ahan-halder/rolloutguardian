@@ -1,0 +1,52 @@
+{
+  "resilience_data": {
+    "payment-service": {
+      "chaos": {
+        "days_since_last_result": 118,
+        "resilience_score": null,
+        "last_experiment_id": "exp-2026-03-12"
+      },
+      "srm": {
+        "slo": "payment-service-availability",
+        "error_budget_remaining_pct": 12.4,
+        "burn_rate_24h": 2.8
+      },
+      "sto": {
+        "open_critical": 0,
+        "open_high": 1
+      }
+    },
+    "fraud-check-service": {
+      "chaos": {
+        "days_since_last_result": 14,
+        "resilience_score": 0.92,
+        "last_experiment_id": "exp-2026-06-25"
+      },
+      "srm": {
+        "slo": "fraud-check-availability",
+        "error_budget_remaining_pct": 61.2,
+        "burn_rate_24h": 0.9
+      },
+      "sto": {
+        "open_critical": 0,
+        "open_high": 0
+      }
+    },
+    "ledger-service": {
+      "chaos": {
+        "days_since_last_result": 30,
+        "resilience_score": 0.88,
+        "last_experiment_id": "exp-2026-06-09"
+      },
+      "srm": {
+        "slo": "ledger-availability",
+        "error_budget_remaining_pct": 89.5,
+        "burn_rate_24h": 0.2
+      },
+      "sto": {
+        "open_critical": 0,
+        "open_high": 0
+      }
+    }
+  }
+}

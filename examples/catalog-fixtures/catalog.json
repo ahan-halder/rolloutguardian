@@ -1,0 +1,48 @@
+{
+  "services": [
+    {
+      "name": "checkout-service",
+      "flag_keys": ["checkout-v2-express-pay"],
+      "owner": "checkout-team",
+      "dependencies": [
+        "payment-service",
+        "fraud-check-service"
+      ]
+    },
+    {
+      "name": "payment-service",
+      "flag_keys": [],
+      "owner": "payments-platform",
+      "dependencies": [
+        "ledger-service"
+      ],
+      "k8s_target": {
+        "namespace": "payments",
+        "label_selector": "app=payment-service",
+        "cluster_id": "prod-payments-cluster"
+      }
+    },
+    {
+      "name": "fraud-check-service",
+      "flag_keys": [],
+      "owner": "risk-team",
+      "dependencies": [],
+      "k8s_target": {
+        "namespace": "risk",
+        "label_selector": "app=fraud-check",
+        "cluster_id": "prod-risk-cluster"
+      }
+    },
+    {
+      "name": "ledger-service",
+      "flag_keys": [],
+      "owner": "finance-engineering",
+      "dependencies": [],
+      "k8s_target": {
+        "namespace": "finance",
+        "label_selector": "app=ledger",
+        "cluster_id": "prod-finance-cluster"
+      }
+    }
+  ]
+}

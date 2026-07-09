@@ -1,0 +1,39 @@
+{
+  "flag_key": "checkout-v2-express-pay",
+  "requested_change": "increase_rollout",
+  "from_pct": 25,
+  "to_pct": 50,
+  "blast_radius": [
+    {
+      "service": "payment-service",
+      "confidence": 0.94,
+      "detection_method": "trace_association",
+      "chaos": {
+        "days_since_last_result": 118,
+        "resilience_score": null
+      },
+      "srm": {
+        "slo": "payment-service-availability",
+        "error_budget_remaining_pct": 12.4
+      }
+    },
+    {
+      "service": "fraud-check-service",
+      "confidence": 0.81,
+      "detection_method": "static_callsite",
+      "chaos": {
+        "days_since_last_result": 14,
+        "resilience_score": 0.92
+      },
+      "srm": {
+        "slo": "fraud-check-availability",
+        "error_budget_remaining_pct": 61.2
+      }
+    }
+  ],
+  "decision": "block",
+  "reasons": [
+    "payment-service has no chaos coverage within 90 days AND error budget remaining (12.4%) is below the marginal threshold (10.0%)"
+  ],
+  "suggested_remediation": "examples/experiments/generated/payment-service-pod-delete-min.yaml"
+}

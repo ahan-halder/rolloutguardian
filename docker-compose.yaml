@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  rolloutguardian-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - HARNESS_ACCOUNT_ID=${HARNESS_ACCOUNT_ID:-mock-account}
+      - HARNESS_API_KEY=${HARNESS_API_KEY:-mock-key}
+      - ROLLOUTGUARDIAN_CONFIG=.rolloutguardian.yaml.example
+    volumes:
+      - ./examples:/app/examples
+      - ./policies:/app/policies
+    restart: unless-stopped
