@@ -11,10 +11,13 @@ import (
 
 	"github.com/rolloutguardian/rolloutguardian/internal/aggregator"
 	"github.com/rolloutguardian/rolloutguardian/internal/config"
+	"github.com/rolloutguardian/rolloutguardian/internal/dashboard"
 	"github.com/rolloutguardian/rolloutguardian/internal/harnessclient"
+	"github.com/rolloutguardian/rolloutguardian/internal/notifier"
 	"github.com/rolloutguardian/rolloutguardian/internal/policy"
 	"github.com/rolloutguardian/rolloutguardian/internal/remediation"
 	"github.com/rolloutguardian/rolloutguardian/internal/resolver"
+	"github.com/rolloutguardian/rolloutguardian/internal/scorecard"
 )
 
 type EvaluateRequest struct {
@@ -47,6 +50,8 @@ func main() {
 	agg := aggregator.NewAggregator(&cfg.Signals, mockClient)
 	eng := policy.NewOPAEngine(&cfg.Policy)
 	gen := remediation.NewGenerator(&cfg.Remediation)
+	scoreGen := scorecard.NewGenerator(&cfg.Signals, mockClient)
+	notif := notifier.NewNotifier(&cfg.Notifications)
 
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -96,11 +101,17 @@ func main() {
 			_, _ = gen.GenerateManifest(ctx, decisionRes, mockClient.CatalogServices)
 		}
 
+		_ = notif.Notify(ctx, req.FlagKey, req.RequestedChange, req.FromPct, req.ToPct, decisionRes)
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(EvaluateResponse{
 			RolloutGuardianDecision: decisionRes,
 		})
 	})
+
+	if cfg.Dashboard.Enabled {
+		dashboard.RegisterRoutes(http.DefaultServeMux, cfg, mockClient, res, agg, eng, gen, scoreGen)
+	}
 
 	log.Printf("RolloutGuardian Gate Server listening on :%s (Mode: %s)", *port, cfg.Policy.Mode)
 	if err := http.ListenAndServe(":"+*port, nil); err != nil {

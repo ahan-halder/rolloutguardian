@@ -7,13 +7,17 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/rolloutguardian/rolloutguardian/backtest"
 	"github.com/rolloutguardian/rolloutguardian/internal/aggregator"
 	"github.com/rolloutguardian/rolloutguardian/internal/config"
 	"github.com/rolloutguardian/rolloutguardian/internal/harnessclient"
+	"github.com/rolloutguardian/rolloutguardian/internal/notifier"
 	"github.com/rolloutguardian/rolloutguardian/internal/policy"
 	"github.com/rolloutguardian/rolloutguardian/internal/remediation"
 	"github.com/rolloutguardian/rolloutguardian/internal/resolver"
+	"github.com/rolloutguardian/rolloutguardian/internal/scorecard"
 )
 
 func main() {
@@ -29,6 +33,10 @@ func main() {
 		runEvaluate(os.Args[2:])
 	case "explain":
 		runExplain(os.Args[2:])
+	case "scorecard":
+		runScorecard(os.Args[2:])
+	case "backtest":
+		runBacktest(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown subcommand: %s\n", subcommand)
 		printUsage()
@@ -41,6 +49,8 @@ func printUsage() {
 	fmt.Println("\nCommands:")
 	fmt.Println("  evaluate   Evaluate a proposed feature flag rollout change against resilience gates")
 	fmt.Println("  explain    Explain the reasoning trail and audit breakdown for a feature flag")
+	fmt.Println("  scorecard  Generate a multi-service resilience readiness scorecard across the org")
+	fmt.Println("  backtest   Replay scoring logic against historical rollout timestamps to prove impact")
 }
 
 func runEvaluate(args []string) {
@@ -69,18 +79,7 @@ func runEvaluate(args []string) {
 	ctx := context.Background()
 
 	// Use MockClient by default or HTTPClient if API key is real
-	var client harnessclient.Client
-	apiKey := os.Getenv(cfg.Harness.Auth.APIKeyEnv)
-	if apiKey != "" && apiKey != "mock-key" && !strings.HasPrefix(apiKey, "pat.") {
-		client = harnessclient.NewHTTPClient(cfg.Harness.BaseURL, cfg.Harness.AccountID, apiKey)
-	} else {
-		mockClient, err := harnessclient.NewMockClient("examples/catalog-fixtures/catalog.json", "examples/catalog-fixtures/chaos-map.json")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating mock client: %v\n", err)
-			os.Exit(1)
-		}
-		client = mockClient
-	}
+	client := resolveClient(cfg)
 
 	res := resolver.NewResolver(&cfg.BlastRadius, client)
 	nodes, err := res.ResolveBlastRadius(ctx, *flagKey)
@@ -111,6 +110,13 @@ func runEvaluate(args []string) {
 		}
 	} else if *dryRun && decisionRes.Decision == "block" {
 		decisionRes.SuggestedRemediation = fmt.Sprintf("examples/experiments/generated/%s-pod-delete-min.yaml", getFirstTarget(decisionRes))
+	}
+
+	if !*dryRun {
+		notif := notifier.NewNotifier(&cfg.Notifications)
+		if err := notif.Notify(ctx, *flagKey, "increase_rollout", *fromRollout, *targetRollout, decisionRes); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed sending notification: %v\n", err)
+		}
 	}
 
 	if *jsonOutput {
@@ -176,20 +182,41 @@ func runExplain(args []string) {
 		os.Exit(1)
 	}
 
-	cfg, _ := config.LoadConfig(*configPath)
-	mockClient, _ := harnessclient.NewMockClient("examples/catalog-fixtures/catalog.json", "examples/catalog-fixtures/chaos-map.json")
+	cfg, err := config.LoadConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
 
 	ctx := context.Background()
-	res := resolver.NewResolver(&cfg.BlastRadius, mockClient)
-	nodes, _ := res.ResolveBlastRadius(ctx, *flagKey)
-	agg := aggregator.NewAggregator(&cfg.Signals, mockClient)
-	payload, _ := agg.AggregateSignals(ctx, *flagKey, "increase_rollout", 25, 50, nodes)
+	client := resolveClient(cfg)
+
+	res := resolver.NewResolver(&cfg.BlastRadius, client)
+	nodes, err := res.ResolveBlastRadius(ctx, *flagKey)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error resolving blast radius: %v\n", err)
+		os.Exit(1)
+	}
+
+	agg := aggregator.NewAggregator(&cfg.Signals, client)
+	payload, err := agg.AggregateSignals(ctx, *flagKey, "increase_rollout", 25, 50, nodes)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error aggregating signals: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Determine owning service from resolved flag
+	flagDetails, _ := client.GetFlagDetails(ctx, *flagKey)
+	ownerService := "unknown"
+	if flagDetails != nil && flagDetails.OwnerService != "" {
+		ownerService = flagDetails.OwnerService
+	}
 
 	fmt.Printf("\n============================================================\n")
 	fmt.Printf("RolloutGuardian Explain Report: %s\n", *flagKey)
 	fmt.Printf("============================================================\n\n")
 	fmt.Printf("Flag Key:        %s\n", *flagKey)
-	fmt.Printf("Owning Service:  %s\n", "checkout-service")
+	fmt.Printf("Owning Service:  %s\n", ownerService)
 	fmt.Printf("Resolved Blast Radius:\n")
 
 	for _, n := range payload.BlastRadius {
@@ -212,7 +239,11 @@ func runExplain(args []string) {
 	}
 
 	eng := policy.NewOPAEngine(&cfg.Policy)
-	decisionRes, _ := eng.Evaluate(ctx, payload)
+	decisionRes, err := eng.Evaluate(ctx, payload)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error evaluating policy: %v\n", err)
+		os.Exit(1)
+	}
 	fmt.Printf("Computed Governance Decision: %s\n", strings.ToUpper(decisionRes.Decision))
 	for _, r := range decisionRes.Reasons {
 		fmt.Printf("  * %s\n", r)
@@ -232,4 +263,99 @@ func getFirstTarget(res *policy.DecisionResult) string {
 		return res.BlastRadius[0].Service
 	}
 	return "target-service"
+}
+
+func runScorecard(args []string) {
+	fs := flag.NewFlagSet("scorecard", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to configuration file")
+	jsonOutput := fs.Bool("json", false, "Output structured JSON report")
+
+	_ = fs.Parse(args)
+
+	cfg, err := config.LoadConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	client := resolveClient(cfg)
+
+	ctx := context.Background()
+	gen := scorecard.NewGenerator(&cfg.Signals, client)
+	report, err := gen.GenerateReport(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating scorecard report: %v\n", err)
+		os.Exit(1)
+	}
+
+	if *jsonOutput {
+		out, _ := json.MarshalIndent(report, "", "  ")
+		fmt.Println(string(out))
+		return
+	}
+
+	fmt.Printf("\n================================================================================\n")
+	fmt.Printf("RolloutGuardian Resilience Readiness Scorecard\n")
+	fmt.Printf("Generated: %s\n", report.GeneratedAt.Format(time.RFC1123))
+	fmt.Printf("================================================================================\n")
+	fmt.Printf("Summary: Grade A: %d | Grade B: %d | Grade C: %d | Grade F: %d\n", report.TotalGradeA, report.TotalGradeB, report.TotalGradeC, report.TotalGradeF)
+	fmt.Printf("--------------------------------------------------------------------------------\n")
+	fmt.Printf("%-22s %-18s %-7s %-11s %-13s %s\n", "SERVICE NAME", "OWNER TEAM", "GRADE", "CHAOS COV", "ERROR BUDGET", "STO")
+	fmt.Printf("--------------------------------------------------------------------------------\n")
+
+	for _, s := range report.Services {
+		grade := fmt.Sprintf("[ %s ]", s.ReadinessGrade)
+		chaosDesc := fmt.Sprintf("%dd stale", s.ChaosDaysStale)
+		if s.ChaosDaysStale <= cfg.Signals.Chaos.CoverageFreshnessDays {
+			chaosDesc = fmt.Sprintf("%dd fresh", s.ChaosDaysStale)
+		}
+		srmDesc := fmt.Sprintf("%.1f%%", s.ErrorBudgetRemaining)
+		stoDesc := fmt.Sprintf("%d/%d", s.STOCritical, s.STOHigh)
+
+		fmt.Printf("%-22s %-18s %-7s %-11s %-13s %s\n", s.ServiceName, s.OwnerTeam, grade, chaosDesc, srmDesc, stoDesc)
+	}
+	fmt.Printf("--------------------------------------------------------------------------------\n\n")
+}
+
+func runBacktest(args []string) {
+	fs := flag.NewFlagSet("backtest", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to configuration file")
+	jsonOutput := fs.Bool("json", false, "Output structured JSON report")
+
+	_ = fs.Parse(args)
+
+	cfg, err := config.LoadConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	ctx := context.Background()
+	report, err := backtest.RunSimulatedBacktest(ctx, cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error running backtest: %v\n", err)
+		os.Exit(1)
+	}
+
+	if *jsonOutput {
+		out, _ := json.MarshalIndent(report, "", "  ")
+		fmt.Println(string(out))
+		return
+	}
+
+	fmt.Println(backtest.FormatSummary(report))
+}
+
+// resolveClient returns a MockClient for local testing or an HTTPClient when a real API key is set.
+func resolveClient(cfg *config.Config) harnessclient.Client {
+	apiKey := os.Getenv(cfg.Harness.Auth.APIKeyEnv)
+	if apiKey != "" && apiKey != "mock-key" && !strings.HasPrefix(apiKey, "pat.") {
+		return harnessclient.NewHTTPClient(cfg.Harness.BaseURL, cfg.Harness.AccountID, apiKey)
+	}
+	mockClient, err := harnessclient.NewMockClient("examples/catalog-fixtures/catalog.json", "examples/catalog-fixtures/chaos-map.json")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating mock client: %v\n", err)
+		os.Exit(1)
+	}
+	return mockClient
 }

@@ -1,0 +1,20 @@
+experiment:
+    name: payment-service-pod-delete-min
+    generated_by: rolloutguardian
+    generated_for_flag: checkout-v2-express-pay
+    infrastructure_id: prod-payments-cluster
+    target:
+        namespace: payments
+        label_selector: app=payment-service
+    faults:
+        - name: pod-delete
+          weight: 6
+          tunables:
+            total_chaos_duration_sec: 60
+            chaos_interval_sec: 10
+            force: false
+          probes:
+            - name: payment-latency-steady-state
+              type: prometheus
+              mode: Continuous
+              expected: p99 < 200ms

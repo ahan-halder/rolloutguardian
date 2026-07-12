@@ -1,0 +1,71 @@
+template:
+  name: RolloutGuardian Resilience Gate
+  identifier: rolloutguardian_resilience_gate
+  versionLabel: v1.0.0
+  type: CustomStep
+  projectIdentifier: ${projectIdentifier}
+  orgIdentifier: ${orgIdentifier}
+  spec:
+    timeout: 10m
+    inputs:
+      - name: flag_key
+        type: String
+        description: "Feature Flag key being modified in this deployment/rollout"
+        required: true
+      - name: requested_change
+        type: String
+        description: "Operation being attempted (e.g., increase_rollout, enable_target)"
+        required: false
+        default: "increase_rollout"
+      - name: from_pct
+        type: Number
+        description: "Current rollout percentage (0-100)"
+        required: false
+        default: 25
+      - name: to_pct
+        type: Number
+        description: "Target rollout percentage being evaluated (0-100)"
+        required: true
+        default: 50
+      - name: enforce_mode
+        type: Boolean
+        description: "If true, fails the pipeline stage on 'block' governance decisions"
+        required: false
+        default: true
+      - name: config_path
+        type: String
+        description: "Path to .rolloutguardian.yaml configuration inside repository"
+        required: false
+        default: ".rolloutguardian.yaml"
+    outputs:
+      - name: decision
+        type: String
+        description: "Governance evaluation outcome: allow | warn | block"
+      - name: blast_radius_size
+        type: Number
+        description: "Number of resolved downstream services in high-confidence blast radius"
+      - name: remediation_manifest
+        type: String
+        description: "Path to generated auto-remediation Kubernetes experiment manifest"
+    execution:
+      steps:
+        - step:
+            type: ContainerStep
+            name: Run RolloutGuardian Evaluation
+            identifier: run_rolloutguardian
+            spec:
+              image: rolloutguardian/step-runner:v1.0.0
+              command: ["/entrypoint.sh"]
+              environmentVariables:
+                FLAG_KEY: <+inputs.flag_key>
+                REQUESTED_CHANGE: <+inputs.requested_change>
+                FROM_PCT: <+inputs.from_pct>
+                TO_PCT: <+inputs.to_pct>
+                ENFORCE_MODE: <+inputs.enforce_mode>
+                ROLLOUTGUARDIAN_CONFIG: <+inputs.config_path>
+                HARNESS_ACCOUNT_ID: <+account.identifier>
+                HARNESS_API_KEY: <+secrets.getValue("rolloutguardian_harness_api_key")>
+              outputVariables:
+                - name: decision
+                - name: blast_radius_size
+                - name: remediation_manifest
