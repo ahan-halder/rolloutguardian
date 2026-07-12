@@ -23,7 +23,7 @@ test_block_stale_chaos_and_low_budget {
 			{
 				"name": "payment-service",
 				"chaos": {"days_since_last_result": 118, "resilience_score": 0.50},
-				"srm": {"error_budget_remaining_pct": 12.4},
+				"srm": {"error_budget_remaining_pct": 8.5},
 				"sto": {"open_critical": 0},
 			}
 		],

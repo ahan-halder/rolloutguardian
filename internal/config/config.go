@@ -9,11 +9,36 @@ import (
 )
 
 type Config struct {
-	Harness     HarnessConfig     `yaml:"harness" json:"harness"`
-	BlastRadius BlastRadiusConfig `yaml:"blast_radius" json:"blast_radius"`
-	Signals     SignalsConfig     `yaml:"signals" json:"signals"`
-	Policy      PolicyConfig      `yaml:"policy" json:"policy"`
-	Remediation RemediationConfig `yaml:"remediation" json:"remediation"`
+	Harness       HarnessConfig       `yaml:"harness" json:"harness"`
+	BlastRadius   BlastRadiusConfig   `yaml:"blast_radius" json:"blast_radius"`
+	Signals       SignalsConfig       `yaml:"signals" json:"signals"`
+	Policy        PolicyConfig        `yaml:"policy" json:"policy"`
+	Remediation   RemediationConfig   `yaml:"remediation" json:"remediation"`
+	Dashboard     DashboardConfig     `yaml:"dashboard" json:"dashboard"`
+	Notifications NotificationsConfig `yaml:"notifications" json:"notifications"`
+}
+
+type DashboardConfig struct {
+	Enabled   bool   `yaml:"enabled" json:"enabled"`
+	Port      int    `yaml:"port" json:"port"`
+	StaticDir string `yaml:"static_dir" json:"static_dir"`
+}
+
+type NotificationsConfig struct {
+	Slack   SlackConfig   `yaml:"slack" json:"slack"`
+	Webhook WebhookConfig `yaml:"webhook" json:"webhook"`
+}
+
+type SlackConfig struct {
+	Enabled    bool   `yaml:"enabled" json:"enabled"`
+	WebhookURL string `yaml:"webhook_url" json:"webhook_url"`
+	Channel    string `yaml:"channel" json:"channel"`
+}
+
+type WebhookConfig struct {
+	Enabled bool   `yaml:"enabled" json:"enabled"`
+	URL     string `yaml:"url" json:"url"`
+	Secret  string `yaml:"secret" json:"secret"`
 }
 
 type HarnessConfig struct {
@@ -107,7 +132,7 @@ func DefaultConfig() *Config {
 			},
 			SRM: SRMSignalsConfig{
 				MinHealthyBudgetPct:  25.0,
-				MinMarginalBudgetPct: 15.0,
+				MinMarginalBudgetPct: 10.0,
 			},
 			STO: STOSignalsConfig{
 				BlockOnOpenCritical: true,
@@ -120,6 +145,19 @@ func DefaultConfig() *Config {
 		Remediation: RemediationConfig{
 			AutoGenerate: true,
 			OutputDir:    "examples/experiments/generated",
+		},
+		Dashboard: DashboardConfig{
+			Enabled:   true,
+			Port:      8080,
+			StaticDir: "internal/dashboard/web/dist",
+		},
+		Notifications: NotificationsConfig{
+			Slack: SlackConfig{
+				Enabled: false,
+			},
+			Webhook: WebhookConfig{
+				Enabled: false,
+			},
 		},
 	}
 }
@@ -154,6 +192,14 @@ func LoadConfig(configPath string) (*Config, error) {
 	// Resolve environment variables inside fields if needed
 	if accountID := os.Getenv("HARNESS_ACCOUNT_ID"); accountID != "" {
 		cfg.Harness.AccountID = accountID
+	}
+	if slackWebhook := os.Getenv("SLACK_WEBHOOK_URL"); slackWebhook != "" {
+		cfg.Notifications.Slack.WebhookURL = slackWebhook
+		cfg.Notifications.Slack.Enabled = true
+	}
+	if webhookURL := os.Getenv("WEBHOOK_URL"); webhookURL != "" {
+		cfg.Notifications.Webhook.URL = webhookURL
+		cfg.Notifications.Webhook.Enabled = true
 	}
 
 	// Normalize bundle path relative to working directory if needed

@@ -2,7 +2,7 @@ package rolloutguardian
 
 default_coverage_window_days := 90
 min_healthy_budget_pct := 25.0
-min_marginal_budget_pct := 15.0
+min_marginal_budget_pct := 10.0
 
 # Block conditions: Stale Chaos coverage + Critical/Marginal Error Budget
 block[msg] {

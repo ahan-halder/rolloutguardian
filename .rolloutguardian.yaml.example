@@ -21,7 +21,7 @@ signals:
     coverage_freshness_days: 90
   srm:
     min_healthy_budget_pct: 25
-    min_marginal_budget_pct: 15
+    min_marginal_budget_pct: 10
   sto:
     block_on_open_critical: true
 
@@ -32,3 +32,18 @@ policy:
 remediation:
   auto_generate: true
   output_dir: examples/experiments/generated
+
+dashboard:
+  enabled: true
+  port: 8080
+  static_dir: internal/dashboard/web/dist
+
+notifications:
+  slack:
+    enabled: false
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    channel: "#deployments-alerts"
+  webhook:
+    enabled: false
+    url: "${WEBHOOK_URL}"
+    secret: ""
