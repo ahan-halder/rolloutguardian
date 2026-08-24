@@ -20,10 +20,21 @@ import (
 )
 
 type SimulateRequest struct {
-	FlagKey         string  `json:"flag_key"`
-	RequestedChange string  `json:"requested_change"`
-	FromPct         float64 `json:"from_pct"`
-	ToPct           float64 `json:"to_pct"`
+	FlagKey          string   `json:"flag_key"`
+	RequestedChange  string   `json:"requested_change"`
+	FromPct          float64  `json:"from_pct"`
+	ToPct            float64  `json:"to_pct"`
+	TargetRolloutPct *float64 `json:"target_rollout_pct"`
+}
+
+func (req *SimulateRequest) resolvedToPct() float64 {
+	if req.ToPct != 0 {
+		return req.ToPct
+	}
+	if req.TargetRolloutPct != nil {
+		return *req.TargetRolloutPct
+	}
+	return 0
 }
 
 type FlagSummary struct {
@@ -100,6 +111,7 @@ func RegisterRoutes(mux *http.ServeMux, cfg *config.Config, client harnessclient
 		if req.RequestedChange == "" {
 			req.RequestedChange = "increase_rollout"
 		}
+		req.ToPct = req.resolvedToPct()
 		if req.ToPct == 0 {
 			req.ToPct = 50
 		}
@@ -135,7 +147,8 @@ func RegisterRoutes(mux *http.ServeMux, cfg *config.Config, client harnessclient
 		_ = json.NewEncoder(w).Encode(decisionRes)
 	})
 
-	// Static UI serving
+	// Static UI serving. Prefer the tracked package HTML so clones still work
+	// even when a gitignored dist/ folder is absent.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			http.NotFound(w, r)
@@ -143,25 +156,20 @@ func RegisterRoutes(mux *http.ServeMux, cfg *config.Config, client harnessclient
 		}
 
 		staticDir := cfg.Dashboard.StaticDir
-		if staticDir == "" {
-			staticDir = "internal/dashboard/web/dist"
-		}
-
-		targetPath := filepath.Join(staticDir, r.URL.Path)
-		info, err := os.Stat(targetPath)
-		if err != nil || info.IsDir() {
-			// Check if index.html exists on disk
+		if staticDir != "" {
 			indexPath := filepath.Join(staticDir, "index.html")
-			if _, err := os.Stat(indexPath); err == nil {
+			if _, err := os.Stat(indexPath); err == nil && (r.URL.Path == "/" || r.URL.Path == "/index.html") {
 				http.ServeFile(w, r, indexPath)
 				return
 			}
-			// Fallback to embedded html dashboard if index.html not found on disk
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = w.Write([]byte(embeddedHTMLDashboard))
+		}
+
+		if r.URL.Path != "/" && r.URL.Path != "/index.html" {
+			http.NotFound(w, r)
 			return
 		}
 
-		http.ServeFile(w, r, targetPath)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(embeddedHTMLDashboard))
 	})
 }

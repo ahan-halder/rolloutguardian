@@ -36,7 +36,6 @@ remediation:
 dashboard:
   enabled: true
   port: 8080
-  static_dir: internal/dashboard/web/dist
 
 notifications:
   slack:

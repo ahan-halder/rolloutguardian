@@ -149,7 +149,7 @@ func DefaultConfig() *Config {
 		Dashboard: DashboardConfig{
 			Enabled:   true,
 			Port:      8080,
-			StaticDir: "internal/dashboard/web/dist",
+			StaticDir: "",
 		},
 		Notifications: NotificationsConfig{
 			Slack: SlackConfig{
