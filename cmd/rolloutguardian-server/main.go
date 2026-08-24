@@ -21,10 +21,11 @@ import (
 )
 
 type EvaluateRequest struct {
-	FlagKey         string  `json:"flag_key"`
-	RequestedChange string  `json:"requested_change"`
-	FromPct         float64 `json:"from_pct"`
-	ToPct           float64 `json:"to_pct"`
+	FlagKey          string   `json:"flag_key"`
+	RequestedChange  string   `json:"requested_change"`
+	FromPct          float64  `json:"from_pct"`
+	ToPct            float64  `json:"to_pct"`
+	TargetRolloutPct *float64 `json:"target_rollout_pct"`
 }
 
 type EvaluateResponse struct {
@@ -74,6 +75,12 @@ func main() {
 		if req.FlagKey == "" {
 			http.Error(w, "flag_key is required", http.StatusBadRequest)
 			return
+		}
+		if req.ToPct == 0 && req.TargetRolloutPct != nil {
+			req.ToPct = *req.TargetRolloutPct
+		}
+		if req.RequestedChange == "" {
+			req.RequestedChange = "increase_rollout"
 		}
 
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)

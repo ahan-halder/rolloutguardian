@@ -75,6 +75,14 @@ func TestServerRoutes(t *testing.T) {
 		t.Errorf("expected block or warn decision in simulation, got %s", decisionRes.Decision)
 	}
 
+	aliasPayload := []byte(`{"flag_key":"checkout-v2-express-pay","target_rollout_pct":50}`)
+	reqAlias := httptest.NewRequest(http.MethodPost, "/api/simulate", bytes.NewReader(aliasPayload))
+	recAlias := httptest.NewRecorder()
+	mux.ServeHTTP(recAlias, reqAlias)
+	if recAlias.Code != http.StatusOK {
+		t.Errorf("expected 200 for target_rollout_pct alias, got %d (body: %s)", recAlias.Code, recAlias.Body.String())
+	}
+
 	// Test GET / (HTML UI serving)
 	reqUI := httptest.NewRequest(http.MethodGet, "/", nil)
 	recUI := httptest.NewRecorder()
