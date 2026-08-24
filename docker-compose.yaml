@@ -11,7 +11,8 @@ services:
       - HARNESS_ACCOUNT_ID=${HARNESS_ACCOUNT_ID:-mock-account}
       - HARNESS_API_KEY=${HARNESS_API_KEY:-mock-key}
       - ROLLOUTGUARDIAN_CONFIG=.rolloutguardian.yaml.example
+    command: ["--config", ".rolloutguardian.yaml.example", "--port", "8080"]
     volumes:
-      - ./examples:/app/examples
-      - ./policies:/app/policies
+      - ./examples:/root/examples
+      - ./policies:/root/policies
     restart: unless-stopped
