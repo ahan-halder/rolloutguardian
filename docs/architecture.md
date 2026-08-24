@@ -20,8 +20,8 @@ For every service within the resolved blast radius, the Aggregator collects runt
 
 ### 3. OPA Decision Engine
 Evaluates aggregated service signals against Rego governance policies (`authz.rego`). Outputs an auditable decision:
-- `block`: When Chaos coverage is stale (`> 90 days`) OR error budget is critically depleted (`< 10%`).
-- `warn`: When error budget is below healthy threshold (`< 25%`) but above marginal (`>= 10%`).
+- `block`: When Chaos coverage is stale (`> 90 days`) **and** error budget is critically depleted (`< 10%`), or when open critical STO findings are present.
+- `warn`: When error budget is below healthy threshold (`< 25%`) but above marginal (`>= 10%`), or when Chaos coverage is stale but the error budget is still healthy.
 - `allow`: When all blast radius services satisfy coverage and budget policies.
 
 ### 4. Remediation Generator

@@ -189,12 +189,17 @@ The dashboard provides live visual simulation of rollout percentage adjustments 
 # 1. Pipeline Evaluation Hook (POST /evaluate)
 curl -X POST http://localhost:8080/evaluate \
   -H "Content-Type: application/json" \
+  -d '{"flag_key": "checkout-v2-express-pay", "from_pct": 25, "to_pct": 50}'
+
+# Equivalent payload using the rollout-percentage alias
+curl -X POST http://localhost:8080/evaluate \
+  -H "Content-Type: application/json" \
   -d '{"flag_key": "checkout-v2-express-pay", "target_rollout_pct": 50}'
 
-# 2. Interactive Simulation Hook (POST /simulate)
-curl -X POST http://localhost:8080/simulate \
+# 2. Interactive Simulation Hook (POST /api/simulate)
+curl -X POST http://localhost:8080/api/simulate \
   -H "Content-Type: application/json" \
-  -d '{"flag_key": "checkout-v2-express-pay", "target_rollout_pct": 75}'
+  -d '{"flag_key": "checkout-v2-express-pay", "from_pct": 25, "to_pct": 75}'
 
 # 3. Health Check (GET /healthz)
 curl http://localhost:8080/healthz
@@ -219,7 +224,8 @@ npm run build
 
 ### Run the MCP Server Directly
 ```bash
-node build/index.js
+npm start
+# Equivalent: node dist/index.js
 ```
 
 ### MCP Server Tool Definitions
@@ -236,4 +242,4 @@ To run RolloutGuardian as a containerized service inside Kubernetes or local Doc
 ```bash
 docker-compose up --build
 ```
-This starts the `rolloutguardian-server` container on port `8080`, mounting `./policies` and `./examples` for live evaluation.
+This starts the `rolloutguardian-server` container on port `8080`. Policies and catalog fixtures are mounted into `/root` (the image working directory) so fixture-backed evaluations pick up local edits.

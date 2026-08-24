@@ -5,7 +5,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/core-Go%201.23%2B-00ADD8?logo=go)](go.mod)
 [![Policy](https://img.shields.io/badge/policy-OPA%20%2F%20Rego-7d9dff)](policies/)
-[![Status](https://img.shields.io/badge/status-active--development-yellow)]()
+[![Status](https://img.shields.io/badge/status-local%20prototype-orange)]()
 
 > Harness's own documentation already describes percentage-based feature rollout as a way to
 > limit the **blast radius** of a release. Harness Chaos Engineering already draws an
@@ -64,6 +64,28 @@ adopt — generates the smallest possible chaos experiment that would close prec
 | **Estimated effort** | 130–190 hours for a v1.0 (see [Roadmap](#18-roadmap) for a phased cut) |
 | **Key differentiator** | The first system to connect FME rollout decisions to Chaos resilience coverage and SRM error budgets as a single, explainable governance decision |
 | **Buildability** | Every integration point below is anchored to a Harness capability that is documented and shipping today — nothing here requires Harness to build anything new |
+### Current implementation status (verified 25 July 2026)
+
+The repository is a **working local prototype**, not a production-ready Harness integration.
+The fixture-backed CLI, policy engine, dashboard/server, remediation generator, scorecard,
+backtest simulator, notifications, and MCP adapter build and run locally. The following checks
+were executed from a clean worktree:
+
+| Check | Result |
+|---|---|
+| `go test ./... -count=1` | PASS — 34 Go test functions across 11 tested packages |
+| `go build ./...` | PASS |
+| `npm run build` in `mcp-adapter/` | PASS |
+| Python syntax compilation | PASS |
+| Fixture-backed `evaluate`, `scorecard`, and `backtest` CLI workflows | PASS |
+
+The real Harness API adapter is **not implemented yet**: the FME, Chaos, SRM, STO, and IDP
+methods in `internal/harnessclient/client.go` currently return explicit `unimplemented` errors,
+and the gate server always uses fixture data. The trace/statistical Python modules also require
+the packages in `analysis/requirements.txt`; they were syntax-checked during this audit, but a
+runtime attempt correctly failed when `networkx` was absent from the audit environment. The Q2
+2026 backtest numbers below are deterministic simulated fixture results, not measurements from
+a production Harness account.
 
 ---
 
@@ -611,7 +633,7 @@ re-triage, just the underlying signal changing.
   is reproducible evidence, not a one-off demo number.
 
 ### 16.2 Verified Go Test Suite Execution (`go test ./... -v -count=1`)
-All **28 automated unit tests across 10 internal packages** execute and pass with 100% success (`0 failures`, `0 flakes`):
+All **34 Go test functions across 11 tested packages** execute and pass with 100% success (`0 failures`) in the fixture-backed test suite:
 
 | Package / Module | Test Cases Executed | Status | Coverage & Verified Behavior |
 |---|:---:|:---:|---|
@@ -647,7 +669,7 @@ ledger-service         finance-engineering [ A ]   30d fresh   89.5%         0/0
 ```
 
 #### 2. Historical Replay & Impact Benchmarks (`rolloutguardian backtest`)
-Replaying 142 historical rollout adjustments across Q2 2026 against actual Sev1/Sev2 outage logs verified the following empirical performance metrics:
+Replaying a deterministic simulated dataset representing 142 rollout adjustments across Q2 2026 produces the following illustrative metrics. These validate the replay engine, but are not empirical production results:
 - **Total Flag Rollout Events Analyzed:** `142 rollouts`
 - **Sev1/Sev2 Incidents within 24h of a Rollout:** `9 incidents`
 - **Incidents Correctly Flagged (`warn` / `block`):** `7 of 9 incidents (77.8% Catch Rate)`
@@ -695,8 +717,11 @@ Reason:   payment-service error budget remaining (12.4%) is below the healthy th
       decision engine, CLI, audit-only mode.
 - [x] **v0.2** — Trace-based statistical blast-radius refinement, remediation manifest generator.
 - [x] **v0.3** — Backtest / impact simulator, MCP adapter (`rolloutguardian_evaluate`, `rolloutguardian_explain`).
-- [x] **v1.0** — Web dashboard, multi-service scorecards, Slack/webhook notifications, packaged
-      as a native Harness Custom Step for one-step pipeline adoption.
+- [x] **v0.4 local prototype** — Web dashboard, multi-service scorecards, Slack/webhook
+      notifications, MCP adapter, and a Harness Custom Step template validated against local fixtures.
+- [ ] **v1.0 production integration** — Implement and contract-test the real Harness FME, Chaos,
+      SRM, STO, and IDP HTTP adapters; make the server select the configured client; validate the
+      Custom Step against a real Harness account; add end-to-end integration tests.
 - [ ] **Later** — IDP Scorecard check contribution (`rolloutguardian-resilience-readiness`), optional
       federation with Harness's own Knowledge Graph tooling as that surface matures.
 
