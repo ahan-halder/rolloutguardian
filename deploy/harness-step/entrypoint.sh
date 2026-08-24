@@ -11,14 +11,14 @@ echo "--------------------------------------------------------------------------
 
 # Run rolloutguardian CLI evaluation in JSON mode
 OUTPUT_JSON=$(rolloutguardian evaluate \
-  --flag-key="${FLAG_KEY}" \
+  --flag="${FLAG_KEY}" \
   --from-rollout="${FROM_PCT:-0}" \
   --target-rollout="${TO_PCT:-50}" \
   --json)
 
-DECISION=$(echo "${OUTPUT_JSON}" | grep -o '"decision": *"[^"]*"' | head -1 | cut -d'"' -f4 || echo "allow")
-BLAST_SIZE=$(echo "${OUTPUT_JSON}" | grep -o '"service": *"[^"]*"' | wc -l || echo "0")
-REMEDIAL_PATH=$(echo "${OUTPUT_JSON}" | grep -o '"suggested_remediation": *"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
+DECISION=$(echo "${OUTPUT_JSON}" | jq -r '.decision // "allow"')
+BLAST_SIZE=$(echo "${OUTPUT_JSON}" | jq -r '.blast_radius | length // 0')
+REMEDIAL_PATH=$(echo "${OUTPUT_JSON}" | jq -r '.suggested_remediation // empty')
 
 echo "Governance Evaluation Decision: $(echo ${DECISION} | tr '[:lower:]' '[:upper:]')"
 echo "Resolved Blast Radius Size: ${BLAST_SIZE} service(s)"
