@@ -36,7 +36,7 @@ def is_in_blast_radius(latencies_on: List[float], latencies_off: List[float], al
     return bool(p_value < alpha)
 
 
-def analyze_trace_export(trace_data: Dict[str, Any], flag_key: float = 0.01) -> Dict[str, Any]:
+def analyze_trace_export(trace_data: Dict[str, Any], alpha: float = 0.01) -> Dict[str, Any]:
     """
     Analyzes historical trace cohorts for candidate downstream services.
     Returns confidence scores based on p-value significance.
@@ -48,7 +48,7 @@ def analyze_trace_export(trace_data: Dict[str, Any], flag_key: float = 0.01) -> 
         lat_on = cohorts.get("on", [])
         lat_off = cohorts.get("off", [])
         
-        in_radius = is_in_blast_radius(lat_on, lat_off)
+        in_radius = is_in_blast_radius(lat_on, lat_off, alpha=alpha)
         if in_radius is None:
             results[service] = {
                 "in_blast_radius": False,
